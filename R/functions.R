@@ -9,7 +9,7 @@
 #' The clade in NCBI should map to a single NCBI id; if you have a synonym, try specifying search terms for rentrez::entrez_search so that it finds the correct id.
 #' @return Nothing, though see the directory of output
 #' @export
-BatchRun <- function(taxon, mintaxa=10, ncbi_path='/usr/local/bin', raxml="raxmlHPC-SSE3") {
+BatchRun <- function(taxon, mintaxa=10, ncbi_path='/usr/local/bin', raxml="raxmlHPC") {
 	taxon_id <- rentrez::entrez_search(db="taxonomy", term=taxon)$ids
 	if(length(taxon_id) > 1) {
 		stop("Multiple taxa found for '" + taxon + "', perhaps you need to specify whether you want a genus, family, etc.")
@@ -172,7 +172,7 @@ RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 	for (i in seq_along(inputs)) {
 		dna <- 	Biostrings::readDNAMultipleAlignment(file.path(seqs_processed, inputs[i]))
 		min.fraction <- min(0.75,1-6/nrow(dna))
-		autoMasked <- maskGaps(dna, min.fraction=min.fraction, min.block.width=1)
+		autoMasked <- Biostrings::maskGaps(dna, min.fraction=min.fraction, min.block.width=1)
 		writeXStringSet(as(autoMasked, "DNAStringSet"),file=file.path(seqs_gappy_removed, inputs[i]))
 	}
 	outputs <- list.files(path=seqs_gappy_removed, pattern="Aligned.*.fasta", full=TRUE)
@@ -185,7 +185,7 @@ RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 #' @return TRUE if it worked
 #' @export
 ConcatenateAll <- function(dna_combined, seqs_final) {
-	concat_dna <- concatenate(dna_combined)
+	concat_dna <- apex::concatenate(dna_combined)
 	rownames(concat_dna) <- gsub(" (voucher|isolate) .*", "", gsub("assembly, .*", "", gsub(" genome ", "", gsub(" complete.*", "", gsub("^ +", "", gsub("^N ", "", gsub(" mitochondri.*", "", gsub("\\d", "", gsub("\\.\\d", "", gsub("\\w\\w\\d\\d", "", rownames(concat_dna)))))))))))
 	concat_dna <- concat_dna[!grepl("\\.", rownames(concat_dna)),]
 	concat_dna <- concat_dna[!grepl("Plakina_finispinata", rownames(concat_dna)),] # has no data
@@ -230,14 +230,16 @@ CreatePartitionFile <- function(dna_combined, seqs_final) {
 	is_rpl16 <- grepl("rpl16", genenames)
 	is_ndhf <- grepl("ndhf", genenames)
 	is_nonfocal <- ((is_16S+is_18S+is_28S+is_COI+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf)!=1)
-	cat(paste0(
+	partition_string <- paste0(
 		"DNA, mitochondrial = ", paste(gene_bounds[(is_16S+is_COI+is_mt)==1], collapse=", "), "\n"
 		,"DNA, 18S = ", paste(gene_bounds[is_18S], collapse=", "), "\n"
 		,"DNA, 28S = ", paste(gene_bounds[is_28S], collapse=", "), "\n"
 		,"DNA, othergenes = ", paste(gene_bounds[is_nonfocal], collapse=", "), "\n"
 		,"DNA, cpDNA = ", paste(gene_bounds[is_cp+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf], collapse=", "), "\n"
-		), 
-		file=file.path(seqs_final, "partition.txt"))
+		)
+		partition_string_split <- strsplit(partition_string, "\n")[[1]]
+		partition_string <- paste0(partition_string_split[grepl("= \\d+", partition_string_split)], "\n")
+		cat(partition_string, file=file.path(seqs_final, "partition.txt"))
 	return(c("partition.txt"))
 }
 
@@ -265,6 +267,16 @@ CreateDir <- function(dir) {
 	return(dir)	
 }
 
+#' Find clusters to keep
+#' @param cids cluster ids
+#' @param n_taxa number of taxa per cluster
+#' @param mintaxa minimum number of taxa per cluster
+#' @return vector of clusters to use
+#' @export
+KeepClusters <- function(cids, n_taxa, mintaxa) {
+	return(cids[n_taxa >= mintaxa])
+}
+
 #' Create the target workflow
 #' @return target workflow
 #' @export
@@ -277,7 +289,7 @@ TargetFactory <- function() {
 	targets::tar_target(seqs_processed, CreateDir("seqs_processed")),
 	targets::tar_target(seqs_raw, CreateDir("seqs_raw")),
 	targets::tar_target(seqs_direct_download, CreateDir("seqs_direct_download")),
-	targets::tar_target(wd, file.path(getwd(), CreateDir("start"))),
+	targets::tar_target(wd, file.path(getwd(), CreateDir("phylotaR_run"))),
 	targets::tar_target(ncbi_dr, targets_df$ncbi_path),
 	targets::tar_target(txid, targets_df$taxon_id), 
 	targets::tar_target(mintaxa, targets_df$min_taxa),
@@ -285,7 +297,7 @@ TargetFactory <- function() {
 	targets::tar_target(all_clusters, RunPhylotaR(wd=wd, txid=txid, ncbi_dr=ncbi_dr)),
 	targets::tar_target(cids, all_clusters@cids),
 	targets::tar_target(n_taxa, phylotaR::get_ntaxa(phylota = all_clusters, cid = cids)),
-	targets::tar_target(keep, cids[n_taxa >= mintaxa]),
+	targets::tar_target(keep, KeepClusters(cids, n_taxa, mintaxa)),
 	targets::tar_target(selected, phylotaR::drop_clstrs(phylota = all_clusters, cid = keep)),
 	targets::tar_target(reduced, phylotaR::drop_by_rank(phylota = selected, rnk = 'species', n = 1)),
 	targets::tar_target(save_genes, SaveGenes(reduced, seqs_raw)),

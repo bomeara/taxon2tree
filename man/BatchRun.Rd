@@ -4,12 +4,7 @@
 \alias{BatchRun}
 \title{Runs the whole analysis}
 \usage{
-BatchRun(
-  taxon,
-  mintaxa = 10,
-  ncbi_path = "/usr/local/bin",
-  raxml = "raxmlHPC-SSE3"
-)
+BatchRun(taxon, mintaxa = 10, ncbi_path = "/usr/local/bin", raxml = "raxmlHPC")
 }
 \arguments{
 \item{taxon}{A clade in NCBI taxonomy}
