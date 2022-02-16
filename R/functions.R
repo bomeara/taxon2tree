@@ -14,13 +14,16 @@ BatchRun <- function(taxon, ncbi_path='/usr/local/bin') {
 	} else if (length(taxon_id) == 0) {
 		stop("No taxa found for '" + taxon + "', perhaps you need to use a different name")
 	}	
-	source(system.file("extdata","_targets.R", package="taxon2tree"))
-	# taxon <<- taxon
-	# taxon_id <<- taxon_id
-	# ncbi_path <<- ncbi_path
-	tar_make()
+	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, ncbi_path=ncbi_path), file="_targets.csv")
+	targets::tar_make(script=system.file("extdata","_targets.R", package="taxon2tree"))
+	#TargetFactory(ncbi_path, taxon_id)
 }
 
+#' Corrects taxon names
+#' @param reduced Phylota
+#' @param cid Cluster id
+#' @return fixed names
+#' @export
 FixNames <- function(reduced, cid) {
 	txids <- get_txids(phylota = reduced, cid = cid, rnk = 'species')
 	scientific_names <- get_tx_slot(phylota = reduced, txid = txids, slt_nm = 'scnm')
@@ -28,15 +31,27 @@ FixNames <- function(reduced, cid) {
 	scientific_names <- gsub('\\.', '', scientific_names)
 	scientific_names <- gsub('\\s+', '_', scientific_names)
 	sids <- reduced@clstrs[[cid]]@sids
-	
+	return(sids)
 }
 
+#' Runs phylotaR
+#' 
+#' @param wd Working directory
+#' @param txid NCBI taxon id
+#' @param ncbi_dr Path to where NCBI tools are installed
+#' @return Phylota
+#' @export
 RunPhylotaR <- function(wd, txid, ncbi_dr) {
 	phylotaR::setup(wd = wd, txid = txid, ncbi_dr = ncbi_dr)
 	phylotaR::run(wd = wd)
 	return(phylotaR::read_phylota(wd))
 }
 
+#' Save genes to a file
+#' @param reduced Clusters
+#' @param seqs_raw Raw sequences directory
+#' @return Output files
+#' @export
 SaveGenes <- function(reduced, seqs_raw) {
 	cids <- reduced@cids	
 	for (i in seq_along(cids)) {
@@ -65,6 +80,12 @@ SaveGenes <- function(reduced, seqs_raw) {
 
 }
 
+#' Process the output of phylotaR
+#' @param inputs input info
+#' @param seqs_processed Output directory
+#' @param seqs_raw Raw sequences directory
+#' @return output files
+#' @export
 ProcessSequencesByGeneConcat <- function(inputs, seqs_processed, seqs_raw) {
 	genes <- gsub("Cluster.*Gene_", "", inputs)
 	genes <- gsub(".fasta", "", genes)
@@ -112,8 +133,14 @@ ProcessSequencesByGeneConcat <- function(inputs, seqs_processed, seqs_raw) {
 	return(outputs)
 }
 
-
-ProcessSequencesByGeneSingle <- function(inputs, seqs_raw, seqs_processed) {
+#' Process the output of phylotaR by gene
+#' @param inputs input info
+#' @param seqs_processed Output directory
+#' @param seqs_raw Raw sequences directory
+#' @param seqs_direct_download Direct download sequences directory
+#' @return output files
+#' @export
+ProcessSequencesByGeneSingle <- function(inputs, seqs_raw, seqs_processed, seqs_direct_download) {
 	mtDNA <- c()
 	system(paste0("rm ", file.path( seqs_processed, "*.fasta")))
 	for (i in seq_along(inputs)) {
@@ -123,14 +150,20 @@ ProcessSequencesByGeneSingle <- function(inputs, seqs_raw, seqs_processed) {
 		  mtDNA <- c(mtDNA, inputs[i])
 		}
 	}
-	system2("cat", args = paste("seqs_direct_download/mtgenomes.fasta", paste0("seqs_raw/", mtDNA)), stdout = "seqs_raw/Concat_mtDNA.fasta")
-	system(paste0('mafft --thread 3 --auto seqs_raw/Concat_mtDNA.fasta > seqs_processed/Aligned_mtDNA.fasta'))
+	system2("cat", args = paste(file.path(seqs_direct_download, "mtgenomes.fasta"), file.path(seqs_raw, mtDNA)), stdout = file.path(seqs_raw, "Concat_mtDNA.fasta"))
+	system(paste0('mafft --thread 3 --auto ', file.path(seqs_raw,'Concat_mtDNA.fasta') ,' > ', file.path(seqs_processed, 'Aligned_mtDNA.fasta')))
 
 
-	outputs <- list.files(path="seqs_processed", pattern="Aligned.*.fasta")
+	outputs <- list.files(path=seqs_processed, pattern="Aligned.*.fasta")
 	return(outputs)
 }
 
+#' Remove gappy columns
+#' @param inputs input info
+#' @param seqs_gappy_removed Output directory
+#' @param seqs_processed Processed sequences directory
+#' @return output files
+#' @export
 RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 	system(paste0("rm ", file.path(seqs_gappy_removed, "*.fasta")))
 	#inputs <- list.files(path="seqs_processed", pattern="Aligned.*.fasta")
@@ -144,6 +177,11 @@ RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 	return(outputs)
 }
 
+#' Concatenate the sequences
+#' @param dna_combined sequences
+#' @param seqs_final Final sequences directory
+#' @return TRUE if it worked
+#' @export
 ConcatenateAll <- function(dna_combined, seqs_final) {
 	concat_dna <- concatenate(dna_combined)
 	rownames(concat_dna) <- gsub(" (voucher|isolate) .*", "", gsub("assembly, .*", "", gsub(" genome ", "", gsub(" complete.*", "", gsub("^ +", "", gsub("^N ", "", gsub(" mitochondri.*", "", gsub("\\d", "", gsub("\\.\\d", "", gsub("\\w\\w\\d\\d", "", rownames(concat_dna)))))))))))
@@ -155,9 +193,14 @@ ConcatenateAll <- function(dna_combined, seqs_final) {
 	rownames(concat_dna) <- gsub(" ", "_", rownames(concat_dna))
 	concat_dna <- concat_dna[!duplicated(rownames(concat_dna)),]
 	phangorn::write.phyDat(concat_dna, file=file.path(seqs_final, 'combined.seq'))
-	
+	return(TRUE)
 }
 
+#' Create partition file for raxml
+#' @param dna_combined sequences
+#' @param seqs_final Final sequences directory
+#' @return File name
+#' @export
 CreatePartitionFile <- function(dna_combined, seqs_final) {
 	genenames <- names(dna_combined@dna)
 	nsites <- unlist(lapply(dna_combined@dna, ncol))	
@@ -188,6 +231,11 @@ CreatePartitionFile <- function(dna_combined, seqs_final) {
 		return(c("partition.txt"))
 }
 
+#' Run raxml
+#' @param seqs_final Final sequences directory
+#' @param ... Other arguments to make targets wait before runnnig
+#' @return TRUE if it worked
+#' @export
 RunRaxml <- function(seqs_final, ...) {
 	setwd(seqs_final)
 	system('raxmlHPC -T 4 -f a -m GTRGAMMA -p 12345 -x 12345 -# 100 -s combined.seq -q partition.txt -n combined')
@@ -195,9 +243,45 @@ RunRaxml <- function(seqs_final, ...) {
 	return(TRUE)
 }
 
+#' Create directory if needed
+#' @param dir Directory to create
+#' @return directory name
+#' @export
 CreateDir <- function(dir) {
 	if (!dir.exists(dir)) {
 		dir.create(dir)
 	}
 	return(dir)	
+}
+
+#' Create the target workflow
+#' @return target workflow
+#' @export
+TargetFactory <- function() {
+
+	list(
+	targets::tar_target(targets_df, read.csv("_targets.csv")),
+	targets::tar_target(seqs_final, CreateDir("seqs_final")),
+	targets::tar_target(seqs_gappy_removed, CreateDir("seqs_gappy_removed")),
+	targets::tar_target(seqs_processed, CreateDir("seqs_processed")),
+	targets::tar_target(seqs_raw, CreateDir("seqs_raw")),
+	targets::tar_target(seqs_direct_download, CreateDir("seqs_direct_download")),
+	targets::tar_target(wd, file.path(getwd(), CreateDir("start"))),
+	targets::tar_target(ncbi_dr, targets_df$ncbi_path),
+	targets::tar_target(txid, targets_df$taxon_id), 
+	targets::tar_target(all_clusters, RunPhylotaR(wd=wd, txid=txid, ncbi_dr=ncbi_dr)),
+	targets::tar_target(cids, all_clusters@cids),
+	targets::tar_target(n_taxa, phylotaR::get_ntaxa(phylota = all_clusters, cid = cids)),
+	targets::tar_target(keep, cids[n_taxa >= 10]),
+	targets::tar_target(selected, phylotaR::drop_clstrs(phylota = all_clusters, cid = keep)),
+	targets::tar_target(reduced, phylotaR::drop_by_rank(phylota = selected, rnk = 'species', n = 1)),
+	targets::tar_target(save_genes, SaveGenes(reduced, seqs_raw)),
+	targets::tar_target(process_genes, ProcessSequencesByGeneSingle(save_genes,  seqs_raw, seqs_processed, seqs_direct_download)),
+	targets::tar_target(gaps_removed, RemoveGappy(process_genes, seqs_gappy_removed, seqs_processed)),
+	targets::tar_target(dna_combined, apex::read.multiFASTA(gaps_removed)
+	),
+	targets::tar_target(concatenate_all, ConcatenateAll(dna_combined, seqs_final)),
+	targets::tar_target(partitions, CreatePartitionFile(dna_combined, seqs_final)),
+	targets::tar_target(raxmlrun, RunRaxml(seqs_final, concatenate_all, partitions))
+	)
 }
