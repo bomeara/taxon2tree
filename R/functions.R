@@ -1,20 +1,22 @@
 #' Runs the whole analysis
 #' @param taxon A clade in NCBI taxonomy
+#' @param mintaxa How many taxa are needed for a gene to be included
 #' @param ncbi_path Path to where NCBI tools are installed
+#' @param raxml Name of raxml executable; include full path if not in $PATH
 #' 
 #' This starts the analysis; if you already started and the computer crashed, this will pick it up from where it left off. It will run in the current working directory. 
 #' 
 #' The clade in NCBI should map to a single NCBI id; if you have a synonym, try specifying search terms for rentrez::entrez_search so that it finds the correct id.
 #' @return Nothing, though see the directory of output
 #' @export
-BatchRun <- function(taxon, ncbi_path='/usr/local/bin') {
+BatchRun <- function(taxon, mintaxa=10, ncbi_path='/usr/local/bin', raxml="raxmlHPC-SSE3") {
 	taxon_id <- rentrez::entrez_search(db="taxonomy", term=taxon)$ids
 	if(length(taxon_id) > 1) {
 		stop("Multiple taxa found for '" + taxon + "', perhaps you need to specify whether you want a genus, family, etc.")
 	} else if (length(taxon_id) == 0) {
 		stop("No taxa found for '" + taxon + "', perhaps you need to use a different name")
 	}	
-	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, ncbi_path=ncbi_path), file="_targets.csv")
+	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, mintaxa=mintaxa, ncbi_path=ncbi_path, raxml=raxml), file="_targets.csv")
 	targets::tar_make(script=system.file("extdata","_targets.R", package="taxon2tree"))
 	#TargetFactory(ncbi_path, taxon_id)
 }
@@ -219,26 +221,35 @@ CreatePartitionFile <- function(dna_combined, seqs_final) {
 	is_COI <- grepl("oxidase", genenames)
 	is_mt <- grepl("mtDNA", genenames)
 	is_cp <- grepl("cpDNA", genenames)
+	is_rbcl <- grepl("rbcl", genenames)
+	is_matk <- grepl("matk", genenames)
+	is_trnl <- grepl("trnl", genenames)
+	is_trnk <- grepl("trnk", genenames)
+	is_psba_trnh <- grepl("psba_trnh", genenames)
+	is_rpl32 <- grepl("rpl32", genenames)
+	is_rpl16 <- grepl("rpl16", genenames)
+	is_ndhf <- grepl("ndhf", genenames)
 	is_nonfocal <- ((is_16S+is_18S+is_28S+is_COI+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf)!=1)
 	cat(paste0(
 		"DNA, mitochondrial = ", paste(gene_bounds[(is_16S+is_COI+is_mt)==1], collapse=", "), "\n"
 		,"DNA, 18S = ", paste(gene_bounds[is_18S], collapse=", "), "\n"
 		,"DNA, 28S = ", paste(gene_bounds[is_28S], collapse=", "), "\n"
-		,"DNA, othergenes = ", paste(gene_bounds[is_nonfocal], collapse=", "), "\n",
-		,"DNA, cpDNA = ", paste(gene_bounds[is_cp], collapse=", "), "\n"
+		,"DNA, othergenes = ", paste(gene_bounds[is_nonfocal], collapse=", "), "\n"
+		,"DNA, cpDNA = ", paste(gene_bounds[is_cp+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf], collapse=", "), "\n"
 		), 
 		file=file.path(seqs_final, "partition.txt"))
-		return(c("partition.txt"))
+	return(c("partition.txt"))
 }
 
 #' Run raxml
 #' @param seqs_final Final sequences directory
+#' @param raxml RAxML name and perhaps path
 #' @param ... Other arguments to make targets wait before runnnig
 #' @return TRUE if it worked
 #' @export
-RunRaxml <- function(seqs_final, ...) {
+RunRaxml <- function(seqs_final, raxml, ...) {
 	setwd(seqs_final)
-	system('raxmlHPC -T 4 -f a -m GTRGAMMA -p 12345 -x 12345 -# 100 -s combined.seq -q partition.txt -n combined')
+	system(paste0(raxml, ' -f a -m GTRGAMMA -p 12345 -x 12345 -# 100 -s combined.seq -q partition.txt -n combined'))
 	setwd("..")
 	return(TRUE)
 }
@@ -269,10 +280,12 @@ TargetFactory <- function() {
 	targets::tar_target(wd, file.path(getwd(), CreateDir("start"))),
 	targets::tar_target(ncbi_dr, targets_df$ncbi_path),
 	targets::tar_target(txid, targets_df$taxon_id), 
+	targets::tar_target(mintaxa, targets_df$min_taxa),
+	targets::tar_target(raxml, targets_df$raxml),
 	targets::tar_target(all_clusters, RunPhylotaR(wd=wd, txid=txid, ncbi_dr=ncbi_dr)),
 	targets::tar_target(cids, all_clusters@cids),
 	targets::tar_target(n_taxa, phylotaR::get_ntaxa(phylota = all_clusters, cid = cids)),
-	targets::tar_target(keep, cids[n_taxa >= 10]),
+	targets::tar_target(keep, cids[n_taxa >= mintaxa]),
 	targets::tar_target(selected, phylotaR::drop_clstrs(phylota = all_clusters, cid = keep)),
 	targets::tar_target(reduced, phylotaR::drop_by_rank(phylota = selected, rnk = 'species', n = 1)),
 	targets::tar_target(save_genes, SaveGenes(reduced, seqs_raw)),
@@ -282,6 +295,6 @@ TargetFactory <- function() {
 	),
 	targets::tar_target(concatenate_all, ConcatenateAll(dna_combined, seqs_final)),
 	targets::tar_target(partitions, CreatePartitionFile(dna_combined, seqs_final)),
-	targets::tar_target(raxmlrun, RunRaxml(seqs_final, concatenate_all, partitions))
+	targets::tar_target(raxmlrun, RunRaxml(seqs_final, raxml, concatenate_all, partitions))
 	)
 }

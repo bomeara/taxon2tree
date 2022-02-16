@@ -4,10 +4,12 @@
 \alias{RunRaxml}
 \title{Run raxml}
 \usage{
-RunRaxml(seqs_final, ...)
+RunRaxml(seqs_final, raxml, ...)
 }
 \arguments{
 \item{seqs_final}{Final sequences directory}
+
+\item{raxml}{RAxML name and perhaps path}
 
 \item{...}{Other arguments to make targets wait before runnnig}
 }
