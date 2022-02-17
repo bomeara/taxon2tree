@@ -1,5 +1,5 @@
 # taxon2tree
-Workflow to make a tree from a taxon, leaning heavily on [phylotaR](https://github.com/ropensci/phylotaR), plus some scripts around it to make it slightly easier (making partition files, eliminating gappy sites, throwing out clusters of genes without enough taxa, etc.). 
+Workflow to make a tree from a taxon, leaning heavily on [phylotaR](https://github.com/ropensci/phylotaR), plus some scripts around it to make it slightly easier (making partition files, eliminating gappy sites, throwing out clusters of genes without enough taxa, etc.). See website at https://bomeara.github.io/taxon2tree/.
 
 If you use this, please cite the papers for phylotaR:
 
@@ -10,7 +10,14 @@ You can also cite the taxon2tree package.
 
 **Note that any errors likely come from this package, not from phylotaR.**
 
-To run, the basic approach is:
+To run, the basic approach is to install it:
+
+```
+install.packages("devtools")
+devtools::install_github("bomeara/taxon2tree")
+```
+
+and then use it:
 
 ```
 library(taxon2tree)
