@@ -15,5 +15,5 @@ CreatePartitionFile(dna_combined, seqs_final)
 File name
 }
 \description{
-Create partition file for raxml
+This makes two files: one with partitions for cpDNA, mtDNA, 18S, 28S, and the rest (partitions.txt) and one with each gene in its own partition (partitions_bygene.txt)
 }

@@ -17,6 +17,8 @@ BatchRun <- function(taxon, mintaxa=10, ncbi_path='/usr/local/bin', raxml="raxml
 		stop("No taxa found for '" + taxon + "', perhaps you need to use a different name")
 	}	
 	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, mintaxa=mintaxa, ncbi_path=ncbi_path, raxml=raxml), file="_targets.csv")
+	try(targets::tar_invalidate("targets_df"), silent=TRUE) #so that if we change an option here, it is passed to later steps.
+	targets::tar_glimpse(script=system.file("extdata","_targets.R", package="taxon2tree"))
 	targets::tar_make(script=system.file("extdata","_targets.R", package="taxon2tree"))
 	#TargetFactory(ncbi_path, taxon_id)
 }
@@ -125,10 +127,10 @@ ProcessSequencesByGeneConcat <- function(inputs, seqs_processed, seqs_raw) {
 	system2("cat", args = paste(inputs[is_rbcl], inputs[is_matk], inputs[is_trnl], inputs[is_trnk], inputs[is_psba_trnh], inputs[is_rpl32], inputs[is_rpl16], inputs[is_ndhf]), stdout = file.path("..", seqs_processed, "Concat_cpDNA.fasta"))
 	
 	setwd("../seqs_processed")
-	try(system('mafft --auto Concat_mtDNA.fasta > Aligned_mtDNA.fasta'))
-	try(system('mafft --auto Concat_18S.fasta > Aligned_18S.fasta'))
-	try(system('mafft --auto Concat_28S.fasta > Aligned_28S.fasta'))
-	try(system('mafft --auto Concat_cpDNA.fasta > Concat_cpDNA.fasta'))
+	try(mafftresult <- system('mafft --auto Concat_mtDNA.fasta > Aligned_mtDNA.fasta', intern=TRUE))
+	try(mafftresult <- system('mafft --auto Concat_18S.fasta > Aligned_18S.fasta', intern=TRUE))
+	try(mafftresult <- system('mafft --auto Concat_28S.fasta > Aligned_28S.fasta', intern=TRUE))
+	try(mafftresult <- system('mafft --auto Concat_cpDNA.fasta > Concat_cpDNA.fasta', intern=TRUE))
 
 	setwd("..")	
 	outputs <- list.files(path=seqs_raw, pattern="Cluster_.*_Ntax_.*_Gene_.*.fasta")
@@ -147,13 +149,13 @@ ProcessSequencesByGeneSingle <- function(inputs, seqs_raw, seqs_processed, seqs_
 	system(paste0("rm ", file.path( seqs_processed, "*.fasta")))
 	for (i in seq_along(inputs)) {
 		if(!grepl("(oxidase|16s)", inputs[i])) {
-			system(paste0('mafft --thread 3 --adjustdirectionaccurately --auto ', file.path(seqs_raw, inputs[i]), ' > ', file.path(seqs_processed, paste0('Aligned_', inputs[i]))))
+			mafft_result <- system(paste0('mafft --thread 3 --adjustdirectionaccurately --auto ', file.path(seqs_raw, inputs[i]), ' > ', file.path(seqs_processed, paste0('Aligned_', inputs[i]))), intern=TRUE)
 		} else {
 		  mtDNA <- c(mtDNA, inputs[i])
 		}
 	}
-	system2("cat", args = paste(file.path(seqs_direct_download, "mtgenomes.fasta"), file.path(seqs_raw, mtDNA)), stdout = file.path(seqs_raw, "Concat_mtDNA.fasta"))
-	system(paste0('mafft --thread 3 --auto ', file.path(seqs_raw,'Concat_mtDNA.fasta') ,' > ', file.path(seqs_processed, 'Aligned_mtDNA.fasta')))
+	cat_result <- system2("cat", args = paste(file.path(seqs_direct_download, "mtgenomes.fasta"), file.path(seqs_raw, mtDNA)), stdout = file.path(seqs_raw, "Concat_mtDNA.fasta"))
+	mafft_result <- system(paste0('mafft --thread 3 --auto ', file.path(seqs_raw,'Concat_mtDNA.fasta') ,' > ', file.path(seqs_processed, 'Aligned_mtDNA.fasta')), intern=TRUE)
 
 
 	outputs <- list.files(path=seqs_processed, pattern="Aligned.*.fasta")
@@ -171,7 +173,7 @@ RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 	#inputs <- list.files(path="seqs_processed", pattern="Aligned.*.fasta")
 	for (i in seq_along(inputs)) {
 		dna <- 	Biostrings::readDNAMultipleAlignment(file.path(seqs_processed, inputs[i]))
-		min.fraction <- min(0.75,1-6/nrow(dna))
+		min.fraction <- min(0.75,abs(1-6/nrow(dna)))
 		autoMasked <- Biostrings::maskGaps(dna, min.fraction=min.fraction, min.block.width=1)
 		writeXStringSet(as(autoMasked, "DNAStringSet"),file=file.path(seqs_gappy_removed, inputs[i]))
 	}
@@ -199,6 +201,8 @@ ConcatenateAll <- function(dna_combined, seqs_final) {
 }
 
 #' Create partition file for raxml
+#' 
+#' This makes two files: one with partitions for cpDNA, mtDNA, 18S, 28S, and the rest (partitions.txt) and one with each gene in its own partition (partitions_bygene.txt)
 #' @param dna_combined sequences
 #' @param seqs_final Final sequences directory
 #' @return File name
@@ -229,7 +233,7 @@ CreatePartitionFile <- function(dna_combined, seqs_final) {
 	is_rpl32 <- grepl("rpl32", genenames)
 	is_rpl16 <- grepl("rpl16", genenames)
 	is_ndhf <- grepl("ndhf", genenames)
-	is_nonfocal <- ((is_16S+is_18S+is_28S+is_COI+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf)!=1)
+	is_nonfocal <- ((is_16S+is_18S+is_28S+is_COI+is_mt+is_cp+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf)!=1)
 	partition_string <- paste0(
 		"DNA, mitochondrial = ", paste(gene_bounds[(is_16S+is_COI+is_mt)==1], collapse=", "), "\n"
 		,"DNA, 18S = ", paste(gene_bounds[is_18S], collapse=", "), "\n"
@@ -237,9 +241,15 @@ CreatePartitionFile <- function(dna_combined, seqs_final) {
 		,"DNA, othergenes = ", paste(gene_bounds[is_nonfocal], collapse=", "), "\n"
 		,"DNA, cpDNA = ", paste(gene_bounds[is_cp+is_rbcl+is_matk+is_trnl+is_trnk+is_psba_trnh+is_rpl32+is_rpl16+is_ndhf], collapse=", "), "\n"
 		)
-		partition_string_split <- strsplit(partition_string, "\n")[[1]]
-		partition_string <- paste0(partition_string_split[grepl("= \\d+", partition_string_split)], "\n")
-		cat(partition_string, file=file.path(seqs_final, "partition.txt"))
+	partition_string_split <- strsplit(partition_string, "\n")[[1]]
+	partition_string <- paste0(partition_string_split[grepl("= \\d+", partition_string_split)], "\n")
+	cat(partition_string, file=file.path(seqs_final, "partition.txt"))
+	
+	partition_string_bygene <- ""
+	for (i in seq_along(genenames)) {
+		partition_string_bygene <- paste0(partition_string_bygene, "DNA, ", genenames[i], " = ", gene_bounds[i], "\n")	
+	}
+	cat(partition_string_bygene, file=file.path(seqs_final, "partition_bygene.txt"))
 	return(c("partition.txt"))
 }
 
@@ -292,7 +302,7 @@ TargetFactory <- function() {
 	targets::tar_target(wd, file.path(getwd(), CreateDir("phylotaR_run"))),
 	targets::tar_target(ncbi_dr, targets_df$ncbi_path),
 	targets::tar_target(txid, targets_df$taxon_id), 
-	targets::tar_target(mintaxa, targets_df$min_taxa),
+	targets::tar_target(mintaxa, targets_df$mintaxa),
 	targets::tar_target(raxml, targets_df$raxml),
 	targets::tar_target(all_clusters, RunPhylotaR(wd=wd, txid=txid, ncbi_dr=ncbi_dr)),
 	targets::tar_target(cids, all_clusters@cids),

@@ -1,12 +1,11 @@
 Package: taxon2tree
-Title: What the Package Does (One Line, Title Case)
+Title: From a clade name, download sequences and make a tree
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Brian", "O'Meara", , "omeara.brian@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-0337-5997"))
+Description: Using a unique taxon name (mapped to genbank with rentrez), you can download all the genbank sequences from that taxon (using phylotaR), cluster by gene (phylotaR), align (using mafft), throw out clusters that don't have enough sequences, delete gappy columns, make partition files, and make a tree (using raxml). 
+License: GPL (>= 3)
 Imports: 
     ape,
     Biostrings,
