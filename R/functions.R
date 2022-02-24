@@ -54,9 +54,10 @@ RunPhylotaR <- function(wd, txid, ncbi_dr) {
 #' Save genes to a file
 #' @param reduced Clusters
 #' @param seqs_raw Raw sequences directory
+#' @param minsamples Minimum number of samples
 #' @return Output files
 #' @export
-SaveGenes <- function(reduced, seqs_raw) {
+SaveGenes <- function(reduced, seqs_raw, minsamples=10) {
 	cids <- reduced@cids	
 	for (i in seq_along(cids)) {
 		cid <- cids[[i]]
@@ -68,7 +69,7 @@ SaveGenes <- function(reduced, seqs_raw) {
 		scientific_names <- gsub('\\.', '', scientific_names)
 		scientific_names <- gsub('\\s+', '_', scientific_names)
 		sids <- reduced@clstrs[[cid]]@sids
-		sids_samples <- sample(sids, size=min(10, length(sids)), replace=FALSE)
+		sids_samples <- sample(sids, size=min(minsamples, length(sids)), replace=FALSE)
 		sids_products <- rep(NA, length(sids_samples))
 		for (focal_sid in seq_along(unname(sids_samples))) {
 			try(sids_products[focal_sid] <- ape::getAnnotationsGenBank(sids_samples[focal_sid])$product)

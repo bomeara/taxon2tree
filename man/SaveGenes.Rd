@@ -4,12 +4,14 @@
 \alias{SaveGenes}
 \title{Save genes to a file}
 \usage{
-SaveGenes(reduced, seqs_raw)
+SaveGenes(reduced, seqs_raw, minsamples = 10)
 }
 \arguments{
 \item{reduced}{Clusters}
 
 \item{seqs_raw}{Raw sequences directory}
+
+\item{minsamples}{Minimum number of samples}
 }
 \value{
 Output files
