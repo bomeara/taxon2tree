@@ -1,22 +1,22 @@
 #' Runs the whole analysis
 #' @param taxon A clade in NCBI taxonomy
-#' @param mintaxa How many taxa are needed for a gene to be included
 #' @param ncbi_path Path to where NCBI tools are installed
 #' @param raxml Name of raxml executable; include full path if not in $PATH
+#' @param mintaxa How many taxa are needed for a gene to be included
 #' 
 #' This starts the analysis; if you already started and the computer crashed, this will pick it up from where it left off. It will run in the current working directory. 
 #' 
 #' The clade in NCBI should map to a single NCBI id; if you have a synonym, try specifying search terms for rentrez::entrez_search so that it finds the correct id.
 #' @return Nothing, though see the directory of output
 #' @export
-BatchRun <- function(taxon, mintaxa=10, ncbi_path='/usr/local/bin', raxml="raxmlHPC") {
+BatchRun <- function(taxon, ncbi_path='/usr/local/bin', raxml="raxmlHPC", mintaxa=10) {
 	taxon_id <- rentrez::entrez_search(db="taxonomy", term=taxon)$ids
 	if(length(taxon_id) > 1) {
 		stop("Multiple taxa found for '" + taxon + "', perhaps you need to specify whether you want a genus, family, etc.")
 	} else if (length(taxon_id) == 0) {
 		stop("No taxa found for '" + taxon + "', perhaps you need to use a different name")
 	}	
-	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, mintaxa=mintaxa, ncbi_path=ncbi_path, raxml=raxml), file="_targets.csv")
+	write.csv(data.frame(taxon=taxon, taxon_id=taxon_id, ncbi_path=ncbi_path, raxml=raxml, mintaxa=mintaxa), file="_targets.csv")
 	try(targets::tar_invalidate("targets_df"), silent=TRUE) #so that if we change an option here, it is passed to later steps.
 	targets::tar_glimpse(script=system.file("extdata","_targets.R", package="taxon2tree"))
 	targets::tar_make(script=system.file("extdata","_targets.R", package="taxon2tree"))

@@ -4,16 +4,16 @@
 \alias{BatchRun}
 \title{Runs the whole analysis}
 \usage{
-BatchRun(taxon, mintaxa = 10, ncbi_path = "/usr/local/bin", raxml = "raxmlHPC")
+BatchRun(taxon, ncbi_path = "/usr/local/bin", raxml = "raxmlHPC", mintaxa = 10)
 }
 \arguments{
 \item{taxon}{A clade in NCBI taxonomy}
 
-\item{mintaxa}{How many taxa are needed for a gene to be included}
-
 \item{ncbi_path}{Path to where NCBI tools are installed}
 
-\item{raxml}{Name of raxml executable; include full path if not in $PATH
+\item{raxml}{Name of raxml executable; include full path if not in $PATH}
+
+\item{mintaxa}{How many taxa are needed for a gene to be included
 
 This starts the analysis; if you already started and the computer crashed, this will pick it up from where it left off. It will run in the current working directory.
 
