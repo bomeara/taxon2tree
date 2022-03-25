@@ -175,8 +175,10 @@ RemoveGappy <- function(inputs, seqs_gappy_removed, seqs_processed) {
 	for (i in seq_along(inputs)) {
 		dna <- 	Biostrings::readDNAMultipleAlignment(file.path(seqs_processed, inputs[i]))
 		min.fraction <- min(0.75,abs(1-6/nrow(dna)))
-		autoMasked <- Biostrings::maskGaps(dna, min.fraction=min.fraction, min.block.width=1)
-		writeXStringSet(as(autoMasked, "DNAStringSet"),file=file.path(seqs_gappy_removed, inputs[i]))
+		if(nrow(dna)>0) {
+			autoMasked <- Biostrings::maskGaps(dna, min.fraction=min.fraction, min.block.width=1)
+			writeXStringSet(as(autoMasked, "DNAStringSet"),file=file.path(seqs_gappy_removed, inputs[i]))
+		}
 	}
 	outputs <- list.files(path=seqs_gappy_removed, pattern="Aligned.*.fasta", full=TRUE)
 	return(outputs)
