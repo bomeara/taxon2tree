@@ -74,7 +74,7 @@ SaveGenes <- function(reduced, seqs_raw, minsamples=10) {
 		for (focal_sid in seq_along(unname(sids_samples))) {
 			try(sids_products[focal_sid] <- ape::getAnnotationsGenBank(sids_samples[focal_sid])$product)
 		}
-		gene_name <- gsub(" ", "_", names(table(tolower(sids_products)))[1])
+		gene_name <- gsub(",", "", gsub(" ", "_", names(table(tolower(sids_products)))[1]))
 		good_names <- which(!grepl("_(sp|cf|aff)_", scientific_names))
 		if(length(good_names)>9) {
 			write_sqs(phylota = reduced, sid = sids[good_names], sq_nm = scientific_names[good_names], outfile = file.path(seqs_raw, paste0("Cluster_", cid, "_Ntax_", length(scientific_names[good_names]), "_Gene_", gene_name, ".fasta")))
